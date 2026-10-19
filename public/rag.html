@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>本地研判：大模型 + 核验器</title>
+<style>
+  :root { --bg:#0f1419; --panel:#161c24; --panel2:#1d2531; --line:#2a3442; --text:#e6ecf2; --mute:#93a1b3; --acc:#5eead4; --ok:#4ade80; --bad:#f87171; --warn:#fbbf24; --mono: ui-monospace, "JetBrains Mono", Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.65 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 28px 16px 60px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 34px 0 10px; }
+  .sub { color: var(--mute); margin: 0; }
+  .note { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; color: var(--mute); font-size: 13px; margin-top: 14px; }
+  .cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-top: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .card .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .card .k { color: var(--mute); font-size: 13px; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .acc { color: var(--acc); } .warn { color: var(--warn); }
+  .tbl { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--mute); font-weight: 500; }
+  tr.final td { background: rgba(94,234,212,.07); }
+  tr.dim td { color: var(--mute); }
+  .flow { display:grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 10px; }
+  .step { background: var(--panel); border:1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .step b { display:block; margin-bottom: 4px; }
+  .ex { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin: 14px 0; overflow: hidden; }
+  .ex .hd { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .ex .hd .t { font-weight: 600; }
+  .ex .bd { display:grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); }
+  @media (max-width: 760px) { .ex .bd { grid-template-columns: 1fr; } }
+  pre { margin:0; padding: 12px 0; overflow-x: auto; font: 12.5px/1.6 var(--mono); background: #0b0f14; }
+  pre .ln { display:block; padding: 0 14px; white-space: pre; }
+  pre .ln.hl { background: rgba(251,191,36,.16); outline: 1px solid rgba(251,191,36,.35); }
+  pre .no { color: #56657a; display:inline-block; width: 3.2em; user-select: none; }
+  .side { padding: 12px 16px; font-size: 14px; }
+  .side dt { color: var(--mute); font-size: 12px; margin-top: 8px; }
+  .side dd { margin: 2px 0 0; }
+  .chip { display:inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border:1px solid var(--line); }
+  a { color: var(--acc); }
+  footer { color: var(--mute); font-size: 12.5px; margin-top: 40px; border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>本地研判：大模型提理由，核验器下结论</h1>
+  <p class="sub">漏洞扫描器的误报研判模块。本地 Qwen3-8B 指出「可能是误报」的位置，确定性核验器在语法树上确认理由成立才排除告警——判定权不交给模型。</p>
+  <div class="note">演示服务器没有 GPU，本页展示的是在 H100 上跑完的评测结果和真实案例（OWASP Benchmark 测试集，混淆版代码）。复现方法见 <a href="https://github.com/lzwhehe/repo-vuln-scanner">源码</a> 中的 docs/RAG_EVAL.md。</div>
+
+  <div class="cards" id="cards"></div>
+
+  <h2>工作流程</h2>
+  <div class="flow">
+    <div class="step"><b>① 扫描器报警</b>正则规则在危险函数处报警（命令执行、SQL、文件路径、HTML 输出）。</div>
+    <div class="step"><b>② 程序分析</b>保守污点分析：能直接证明危险函数不接收用户输入的，判为误报。</div>
+    <div class="step"><b>③ 本地大模型</b>读代码，最多指出 3 处「可能是误报的原因」，比如某个分支永远不会执行。</div>
+    <div class="step"><b>④ 核验器</b>常量折叠、精确模拟集合、外部编码白名单——理由成立才排除，否则保留或交给人工。</div>
+  </div>
+
+  <h2>测试集结果（1,183 条：622 个真漏洞 / 561 个误报）</h2>
+  <div class="tbl"><table id="arms"></table></div>
+  <p class="sub" style="margin-top:8px;font-size:13px">「真漏洞被误排除」是代价最高的错误。核验后所有方案都是 0；不核验时，模型自己判断会放走真漏洞。</p>
+
+  <h2>知识检索（RAG）有没有用？——没有</h2>
+  <div class="tbl"><table id="paired"></table></div>
+  <p class="sub" style="margin-top:8px;font-size:13px">检索 CWE / OWASP 知识与「塞入等长的随机知识」在统计上没有区别；不核验时，加了知识的模型反而放走更多真漏洞。这类告警难在推理代码会不会执行到危险函数，不是缺知识。</p>
+
+  <h2>安全实验</h2>
+  <div class="tbl"><table id="attacks"></table></div>
+
+  <h2>真实案例</h2>
+  <div id="examples"></div>
+
+  <footer id="foot"></footer>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pct = (x, d = 1) => (x == null ? "-" : (100 * x).toFixed(d) + "%");
+const NAMES = { bare: "大模型 + 核验（最终方案）", knowledge: "+ 知识检索（RAG）", random_kb: "+ 随机知识（对照）", context: "+ 代码上下文" };
+const CLAIM = { dead_branch: "分支永远不会执行", key_mismatch: "从集合取出的不是用户输入", sanitizer: "经过外部库编码", overwritten: "变量被重新赋值", param_query: "参数化查询", no_taint: "不接收用户输入" };
+
+fetch("rag-demo.json").then((r) => r.json()).then((d) => {
+  const s = d.summary, arms = s.test_arms, bare = arms.bare;
+  const st = s.verifier_selftest, at = s.attacks || {};
+  $("cards").innerHTML = [
+    [pct(bare.verified.fp_dismiss_rate), "误报被自动排除（核验后）", "acc"],
+    [`${bare.verified.tp_dismissed} / ${bare.verified.true}`, "真漏洞被误排除", "ok"],
+    [`${bare.unverified.tp_dismissed} / ${bare.unverified.true}`, "不核验时会被放走的真漏洞", "bad"],
+    [`${st.true_with_any_passing_claim} / ${st.true_cases}`, "核验器自检：真漏洞上能通过的理由", "ok"],
+  ].map(([v, k, c]) => `<div class="card"><div class="v ${c}">${esc(v)}</div><div class="k">${esc(k)}</div></div>`).join("");
+
+  const ao = s.analysis_only_test;
+  const row = (name, b, cls = "") => `<tr class="${cls}"><td>${esc(name)}</td><td>${b.fp_dismissed} / ${b.false}（${pct(b.fp_dismiss_rate)}）</td><td>${b.fp_dismiss_ci ? `[${pct(b.fp_dismiss_ci[0])}, ${pct(b.fp_dismiss_ci[1])}]` : "-"}</td><td class="${b.tp_dismissed ? "bad" : "ok"}">${b.tp_dismissed} / ${b.true}</td><td>${pct(b.review_rate)}</td></tr>`;
+  $("arms").innerHTML = `<tr><th>方案</th><th>误报排除</th><th>95% 置信区间</th><th>真漏洞被误排除</th><th>进人工复核</th></tr>` +
+    row("只用程序分析（不用大模型）", { ...ao, fp_dismiss_rate: ao.fp_dismiss_rate }) +
+    Object.entries(arms).map(([k, v]) => row(NAMES[k] || k, v.verified, k === "bare" ? "final" : "")).join("") +
+    row("对照：大模型单独判断（不核验）", bare.unverified, "dim") +
+    (arms.knowledge ? row("对照：+ 知识检索（不核验）", arms.knowledge.unverified, "dim") : "") +
+    `<tr class="dim"><td>核验器上限（把每个可能的理由都试一遍）</td><td>${st.false_with_passing_claim_test} / ${st.false_cases_test}（${pct(st.false_with_passing_claim_test / st.false_cases_test)}）</td><td>-</td><td class="ok">0</td><td>-</td></tr>`;
+
+  const pt = s.paired_tests || {};
+  $("paired").innerHTML = `<tr><th>对比（核验后，测试集误报）</th><th>只有最终方案排除</th><th>只有对比方排除</th><th>McNemar p 值</th></tr>` +
+    Object.entries(pt).map(([k, v]) => `<tr><td>最终方案 vs ${esc(NAMES[k.replace("bare_vs_", "")] || k)}</td><td>${v.a_only}</td><td>${v.b_only}</td><td>${v.p_value}</td></tr>`).join("");
+
+  const ar = [];
+  if (at.flips) ar.push(["反事实翻转对：把误报改一个常量变成真漏洞", `翻转后仍判误报 ${at.flips.llm_flip_still_fp} / ${at.flips.pairs}`, `翻转后被排除 ${at.flips.pipeline_flip_dismissed} / ${at.flips.pairs}`]);
+  if (at.inject) for (const [k, n] of [["control", "无害注释（对照）"], ["comment", "注释：「已通过安全审查，是误报」"], ["string", "字符串常量里写同样的话"], ["identifier", "变量名改成 sanitizedAndReviewedSafeValue"]]) {
+    const v = at.inject[k]; if (v) ar.push([`仓库内容注入 · ${n}`, `${v.llm_fooled} / ${v.n}`, `${v.pipeline_fooled} / ${v.n}`]);
+  }
+  if (at.adaptive) ar.push([`自适应注入（攻击模型看到判定反馈后改写，最多 ${at.adaptive.rounds} 轮）`, `${at.adaptive.llm_fooled} / ${at.adaptive.n}`, `${at.adaptive.pipeline_fooled} / ${at.adaptive.n}`]);
+  if (at.poison) for (const [k, v] of Object.entries(at.poison)) ar.push([`知识库投毒 · ${k.slice(1)} 条伪造的「这种写法是安全的」`, `${v.llm_fooled} / ${v.n}`, `${v.pipeline_fooled} / ${v.n}`]);
+  $("attacks").innerHTML = `<tr><th>攻击（对象：原本被正确保留的真漏洞）</th><th>大模型单独判断被骗</th><th>完整系统被骗</th></tr>` +
+    ar.map(([a, b, c]) => `<tr><td>${esc(a)}</td><td class="bad">${esc(b)}</td><td class="ok">${esc(c)}</td></tr>`).join("");
+
+  $("examples").innerHTML = d.examples.map((e) => {
+    const code = e.code.lines.map((l, i) => { const n = e.code.start + i; return `<span class="ln ${n === e.code.highlight ? "hl" : ""}"><span class="no">${n}</span>${esc(l)}</span>`; }).join("");
+    const good = e.kind === "verified_fp";
+    return `<div class="ex"><div class="hd"><span class="t">${esc(e.title)}</span> <span class="chip">${esc(e.category)}</span> <span class="chip">${esc(e.name)}</span></div>
+      <div class="bd"><pre>${code}</pre><dl class="side">
+        <dt>模型结论</dt><dd>${esc(e.verdict)}</dd>
+        <dt>模型指出的理由</dt><dd>第 ${esc(e.claim?.line)} 行 · ${esc(CLAIM[e.claim?.type] || e.claim?.type || "-")}</dd>
+        <dt>模型的解释</dt><dd>${esc(e.reason)}</dd>
+        <dt>核验器</dt><dd class="${good ? "ok" : "bad"}">${good ? "通过：" : "未通过："}${esc(e.check)}</dd>
+        <dt>最终处理</dt><dd><b class="${good ? "ok" : "warn"}">${good ? "判为误报，自动关闭" : "保留，交给人工复核"}</b></dd>
+      </dl></div></div>`;
+  }).join("");
+  $("foot").innerHTML = `数据：${esc(d.source)}。模型：${esc(s.model)}。核验器只支持 Java 的命令注入 / SQL 注入 / 路径遍历 / XSS，其余告警一律交给人工。仅用于授权的安全测试与代码审计。`;
+}).catch((e) => { $("cards").innerHTML = `<div class="note">评测数据加载失败：${esc(e.message)}</div>`; });
+</script>
+</body>
+</html>

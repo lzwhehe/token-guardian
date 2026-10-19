@@ -8,3 +8,12 @@ coverage
 .vercel
 .env*.local
 .npmrc
+
+# OWASP Benchmark checkout for scripts/bench_coverage.mjs
+.bench/
+
+# OWASP Benchmark 代码（GPL-2.0）只在本地评测，不随仓库分发
+eval/cases.jsonl
+eval/flip_pairs.jsonl
+eval/verifier_selftest.json
+kb/

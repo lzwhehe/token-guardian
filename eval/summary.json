@@ -1,0 +1,470 @@
+{
+ "dataset": "OWASP Benchmark v1.2（cmdi / sqli / pathtraver / xss，混淆版代码）",
+ "model": "Qwen3-8B（FP8，vLLM，思考模式）",
+ "split": {
+  "dev": {
+   "n": 295,
+   "true": 155,
+   "false": 140
+  },
+  "test": {
+   "n": 1183,
+   "true": 622,
+   "false": 561
+  }
+ },
+ "test_arms": {
+  "bare": {
+   "unverified": {
+    "n": 1183,
+    "true": 622,
+    "false": 561,
+    "fp_dismissed": 415,
+    "fp_dismiss_rate": 0.7398,
+    "tp_dismissed": 17,
+    "tp_retention": 0.9727,
+    "review_rate": 0.049,
+    "benchmark_score": 0.7124,
+    "fp_dismiss_ci": [
+     0.7055,
+     0.7745
+    ],
+    "by_category": {
+     "cmdi": {
+      "true": 101,
+      "false": 100,
+      "fp_dismissed": 72,
+      "tp_dismissed": 8
+     },
+     "pathtraver": {
+      "true": 106,
+      "false": 108,
+      "fp_dismissed": 82,
+      "tp_dismissed": 2
+     },
+     "sqli": {
+      "true": 218,
+      "false": 186,
+      "fp_dismissed": 127,
+      "tp_dismissed": 0
+     },
+     "xss": {
+      "true": 197,
+      "false": 167,
+      "fp_dismissed": 134,
+      "tp_dismissed": 7
+     }
+    }
+   },
+   "verified": {
+    "n": 1183,
+    "true": 622,
+    "false": 561,
+    "fp_dismissed": 318,
+    "fp_dismiss_rate": 0.5668,
+    "tp_dismissed": 0,
+    "tp_retention": 1.0,
+    "review_rate": 0.1598,
+    "benchmark_score": 0.5668,
+    "fp_dismiss_ci": [
+     0.528,
+     0.6086
+    ],
+    "by_category": {
+     "cmdi": {
+      "true": 101,
+      "false": 100,
+      "fp_dismissed": 47,
+      "tp_dismissed": 0
+     },
+     "pathtraver": {
+      "true": 106,
+      "false": 108,
+      "fp_dismissed": 51,
+      "tp_dismissed": 0
+     },
+     "sqli": {
+      "true": 218,
+      "false": 186,
+      "fp_dismissed": 104,
+      "tp_dismissed": 0
+     },
+     "xss": {
+      "true": 197,
+      "false": 167,
+      "fp_dismissed": 116,
+      "tp_dismissed": 0
+     }
+    }
+   },
+   "avg_latency_s": 36.2,
+   "avg_output_tokens": 1010
+  },
+  "knowledge": {
+   "unverified": {
+    "n": 1183,
+    "true": 622,
+    "false": 561,
+    "fp_dismissed": 385,
+    "fp_dismiss_rate": 0.6863,
+    "tp_dismissed": 31,
+    "tp_retention": 0.9502,
+    "review_rate": 0.0363,
+    "benchmark_score": 0.6364,
+    "fp_dismiss_ci": [
+     0.6471,
+     0.7222
+    ],
+    "by_category": {
+     "cmdi": {
+      "true": 101,
+      "false": 100,
+      "fp_dismissed": 69,
+      "tp_dismissed": 24
+     },
+     "pathtraver": {
+      "true": 106,
+      "false": 108,
+      "fp_dismissed": 75,
+      "tp_dismissed": 2
+     },
+     "sqli": {
+      "true": 218,
+      "false": 186,
+      "fp_dismissed": 117,
+      "tp_dismissed": 0
+     },
+     "xss": {
+      "true": 197,
+      "false": 167,
+      "fp_dismissed": 124,
+      "tp_dismissed": 5
+     }
+    }
+   },
+   "verified": {
+    "n": 1183,
+    "true": 622,
+    "false": 561,
+    "fp_dismissed": 299,
+    "fp_dismiss_rate": 0.533,
+    "tp_dismissed": 0,
+    "tp_retention": 1.0,
+    "review_rate": 0.1513,
+    "benchmark_score": 0.533,
+    "fp_dismiss_ci": [
+     0.4922,
+     0.5717
+    ],
+    "by_category": {
+     "cmdi": {
+      "true": 101,
+      "false": 100,
+      "fp_dismissed": 43,
+      "tp_dismissed": 0
+     },
+     "pathtraver": {
+      "true": 106,
+      "false": 108,
+      "fp_dismissed": 53,
+      "tp_dismissed": 0
+     },
+     "sqli": {
+      "true": 218,
+      "false": 186,
+      "fp_dismissed": 95,
+      "tp_dismissed": 0
+     },
+     "xss": {
+      "true": 197,
+      "false": 167,
+      "fp_dismissed": 108,
+      "tp_dismissed": 0
+     }
+    }
+   },
+   "avg_latency_s": 49.2,
+   "avg_output_tokens": 1077
+  },
+  "random_kb": {
+   "unverified": {
+    "n": 1183,
+    "true": 622,
+    "false": 561,
+    "fp_dismissed": 411,
+    "fp_dismiss_rate": 0.7326,
+    "tp_dismissed": 21,
+    "tp_retention": 0.9662,
+    "review_rate": 0.0363,
+    "benchmark_score": 0.6989,
+    "fp_dismiss_ci": [
+     0.6942,
+     0.7654
+    ],
+    "by_category": {
+     "cmdi": {
+      "true": 101,
+      "false": 100,
+      "fp_dismissed": 77,
+      "tp_dismissed": 9
+     },
+     "pathtraver": {
+      "true": 106,
+      "false": 108,
+      "fp_dismissed": 82,
+      "tp_dismissed": 3
+     },
+     "sqli": {
+      "true": 218,
+      "false": 186,
+      "fp_dismissed": 126,
+      "tp_dismissed": 0
+     },
+     "xss": {
+      "true": 197,
+      "false": 167,
+      "fp_dismissed": 126,
+      "tp_dismissed": 9
+     }
+    }
+   },
+   "verified": {
+    "n": 1183,
+    "true": 622,
+    "false": 561,
+    "fp_dismissed": 321,
+    "fp_dismiss_rate": 0.5722,
+    "tp_dismissed": 0,
+    "tp_retention": 1.0,
+    "review_rate": 0.1437,
+    "benchmark_score": 0.5722,
+    "fp_dismiss_ci": [
+     0.5309,
+     0.6106
+    ],
+    "by_category": {
+     "cmdi": {
+      "true": 101,
+      "false": 100,
+      "fp_dismissed": 53,
+      "tp_dismissed": 0
+     },
+     "pathtraver": {
+      "true": 106,
+      "false": 108,
+      "fp_dismissed": 58,
+      "tp_dismissed": 0
+     },
+     "sqli": {
+      "true": 218,
+      "false": 186,
+      "fp_dismissed": 99,
+      "tp_dismissed": 0
+     },
+     "xss": {
+      "true": 197,
+      "false": 167,
+      "fp_dismissed": 111,
+      "tp_dismissed": 0
+     }
+    }
+   },
+   "avg_latency_s": 51.2,
+   "avg_output_tokens": 1056
+  },
+  "context": {
+   "unverified": {
+    "n": 1183,
+    "true": 622,
+    "false": 561,
+    "fp_dismissed": 379,
+    "fp_dismiss_rate": 0.6756,
+    "tp_dismissed": 15,
+    "tp_retention": 0.9759,
+    "review_rate": 0.0372,
+    "benchmark_score": 0.6515,
+    "fp_dismiss_ci": [
+     0.6364,
+     0.7122
+    ],
+    "by_category": {
+     "cmdi": {
+      "true": 101,
+      "false": 100,
+      "fp_dismissed": 67,
+      "tp_dismissed": 11
+     },
+     "pathtraver": {
+      "true": 106,
+      "false": 108,
+      "fp_dismissed": 78,
+      "tp_dismissed": 1
+     },
+     "sqli": {
+      "true": 218,
+      "false": 186,
+      "fp_dismissed": 103,
+      "tp_dismissed": 1
+     },
+     "xss": {
+      "true": 197,
+      "false": 167,
+      "fp_dismissed": 131,
+      "tp_dismissed": 2
+     }
+    }
+   },
+   "verified": {
+    "n": 1183,
+    "true": 622,
+    "false": 561,
+    "fp_dismissed": 303,
+    "fp_dismiss_rate": 0.5401,
+    "tp_dismissed": 0,
+    "tp_retention": 1.0,
+    "review_rate": 0.1361,
+    "benchmark_score": 0.5401,
+    "fp_dismiss_ci": [
+     0.4975,
+     0.5805
+    ],
+    "by_category": {
+     "cmdi": {
+      "true": 101,
+      "false": 100,
+      "fp_dismissed": 45,
+      "tp_dismissed": 0
+     },
+     "pathtraver": {
+      "true": 106,
+      "false": 108,
+      "fp_dismissed": 53,
+      "tp_dismissed": 0
+     },
+     "sqli": {
+      "true": 218,
+      "false": 186,
+      "fp_dismissed": 92,
+      "tp_dismissed": 0
+     },
+     "xss": {
+      "true": 197,
+      "false": 167,
+      "fp_dismissed": 113,
+      "tp_dismissed": 0
+     }
+    }
+   },
+   "avg_latency_s": 39.0,
+   "avg_output_tokens": 1011
+  }
+ },
+ "paired_tests": {
+  "bare_vs_knowledge": {
+   "b_only": 45,
+   "a_only": 64,
+   "p_value": 0.0842
+  },
+  "bare_vs_random_kb": {
+   "b_only": 61,
+   "a_only": 58,
+   "p_value": 0.8546
+  },
+  "bare_vs_context": {
+   "b_only": 42,
+   "a_only": 57,
+   "p_value": 0.1591
+  }
+ },
+ "analysis_only_test": {
+  "n": 1183,
+  "true": 622,
+  "false": 561,
+  "fp_dismissed": 63,
+  "fp_dismiss_rate": 0.11229946524064172,
+  "tp_dismissed": 0,
+  "tp_retention": 1.0,
+  "review_rate": 0.9467455621301775,
+  "benchmark_score": 0.11229946524064172
+ },
+ "verifier_selftest": {
+  "true_cases": 777,
+  "true_with_any_passing_claim": 0,
+  "false_cases": 701,
+  "false_with_passing_claim_all": 624,
+  "false_with_passing_claim_test": 498,
+  "false_cases_test": 561,
+  "no_sink_found": 16
+ },
+ "contamination_dev_v1": {
+  "orig": {
+   "fp_dismissed": 67,
+   "false": 140,
+   "tp_dismissed": 21,
+   "true": 155
+  },
+  "obf": {
+   "fp_dismissed": 27,
+   "false": 140,
+   "tp_dismissed": 18,
+   "true": 155
+  }
+ },
+ "attacks": {
+  "adaptive_run1": {
+   "n": 99,
+   "rounds": 10,
+   "llm_fooled": 42,
+   "pipeline_fooled": 1,
+   "note": "第一次运行：攻击模型把 bar 改名成已存在的 param，生成了编译不通过的代码，核验器误判为安全。已修复（禁止撞名改名；核验器拒绝含重复声明的代码），见第二次运行"
+  },
+  "flips": {
+   "pairs": 100,
+   "llm_orig_fp": 83,
+   "llm_flip_still_fp": 8,
+   "llm_both_correct": 71,
+   "pipeline_orig_dismissed": 56,
+   "pipeline_flip_dismissed": 0
+  },
+  "inject": {
+   "control": {
+    "n": 99,
+    "llm_fooled": 2,
+    "pipeline_fooled": 0
+   },
+   "comment": {
+    "n": 99,
+    "llm_fooled": 4,
+    "pipeline_fooled": 0
+   },
+   "string": {
+    "n": 99,
+    "llm_fooled": 6,
+    "pipeline_fooled": 0
+   },
+   "identifier": {
+    "n": 94,
+    "llm_fooled": 10,
+    "pipeline_fooled": 0
+   }
+  },
+  "poison": {
+   "k1": {
+    "n": 99,
+    "llm_fooled": 20,
+    "pipeline_fooled": 0
+   },
+   "k3": {
+    "n": 99,
+    "llm_fooled": 70,
+    "pipeline_fooled": 0
+   }
+  },
+  "adaptive": {
+   "n": 99,
+   "rounds": 10,
+   "llm_fooled": 40,
+   "pipeline_fooled": 0
+  }
+ }
+}

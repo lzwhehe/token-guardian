@@ -10,8 +10,18 @@ const providerConfigs = {
     label: "DeepSeek",
     defaultModel: "deepseek-v4-pro",
     envKeys: ["DEEPSEEK_API_KEY", "AI_SECURITY_DEEPSEEK_API_KEY"]
+  },
+  // 本地研判服务（rag/service.py）：本地大模型提出候选理由，确定性核验器确认后才允许判为误报。
+  // 不需要 API Key，代码不出内网。
+  "local-rag": {
+    label: "本地研判（大模型 + 核验器）",
+    defaultModel: "qwen3-8b",
+    envKeys: [],
+    keyless: true
   }
 };
+
+const RAG_TRIAGE_URL = process.env.RAG_TRIAGE_URL || "http://127.0.0.1:8790";
 
 const MAX_ANALYSIS_FINDINGS = 8;
 const MAX_FILE_BYTES = 120_000;
@@ -38,7 +48,7 @@ export async function analyzeHighRiskFiles({ apiKey, findingKeys = [], model, pr
 
   const analyses = [];
   for (const group of selectedGroups.slice(0, MAX_ANALYSIS_FINDINGS)) {
-    const codeEvidence = await collectCodeEvidence(group);
+    const codeEvidence = await collectCodeEvidence(group, { includeFullContent: resolvedProvider === "local-rag" });
     const result = await requestAiAnalysis({
       apiKey: resolvedApiKey,
       provider: resolvedProvider,
@@ -46,6 +56,7 @@ export async function analyzeHighRiskFiles({ apiKey, findingKeys = [], model, pr
       group,
       codeEvidence
     });
+    delete codeEvidence.fullContent;
     const persisted = await persistAnalysisResult({
       id: `analysis-${fingerprint(`${group.file}:${Date.now()}`)}`,
       findingKeys: group.findings.map((finding) => finding.key),
@@ -90,7 +101,10 @@ export async function testAiProviderAvailability({ apiKey, model, provider = "op
     provider
   });
 
-  if (resolvedProvider === "deepseek") {
+  if (resolvedProvider === "local-rag") {
+    const response = await fetch(`${RAG_TRIAGE_URL}/health`);
+    if (!response.ok) throw new Error(`本地研判服务不可用（${response.status}）`);
+  } else if (resolvedProvider === "deepseek") {
     await requestChatCompletionsAvailability({
       apiKey: resolvedApiKey,
       model: resolvedModel,
@@ -143,7 +157,7 @@ export function groupHighRiskFindings(findings = []) {
   );
 }
 
-async function collectCodeEvidence(group) {
+async function collectCodeEvidence(group, { includeFullContent = false } = {}) {
   if (!group.fileUrl || !group.fileUrl.includes("github.com")) {
     return {
       status: "unavailable",
@@ -192,6 +206,9 @@ async function collectCodeEvidence(group) {
     source: rawUrl,
     lines: selected.lines,
     content: redactSensitiveText(selected.content),
+    // 本地研判需要整个文件（核验器要解析语法树）；只在 local-rag 时附带，只在内存里用，
+    // 不写入 vault、不返回给前端，也绝不发给第三方 API
+    ...(includeFullContent ? { fullContent: redactSensitiveText(limited) } : {}),
     truncated,
     redacted: true
   };
@@ -265,6 +282,9 @@ function redactSensitiveText(text) {
 }
 
 async function requestAiAnalysis({ apiKey, provider, model, group, codeEvidence }) {
+  if (provider === "local-rag") {
+    return requestLocalRagAnalysis({ group, codeEvidence });
+  }
   if (provider === "deepseek") {
     return requestChatCompletionsAnalysis({
       apiKey,
@@ -526,6 +546,74 @@ async function requestChatCompletionsAnalysis({ apiKey, model, endpoint, group, 
   return normalizeAnalysisResult(parseJsonObject(content));
 }
 
+const LOCAL_RAG_CWES = new Set(["CWE-78", "CWE-89", "CWE-22", "CWE-79"]);
+const CLAIM_LABELS = {
+  dead_branch: "传入用户输入的分支永远不会执行",
+  key_mismatch: "从集合中取出的并不是用户输入",
+  sanitizer: "用户输入在到达危险函数前经过了外部库编码",
+  overwritten: "变量在到达危险函数前被重新赋值",
+  param_query: "SQL 使用了参数化查询",
+  no_taint: "危险函数不接收用户输入"
+};
+
+export async function requestLocalRagAnalysis({ group, codeEvidence }) {
+  const code = codeEvidence.fullContent || "";
+  const targets = group.findings.filter((finding) => LOCAL_RAG_CWES.has(finding.cwe));
+  const decisions = [];
+  for (const cwe of [...new Set(targets.map((finding) => finding.cwe))]) {
+    // 扫描器报警的行号一起交给核验器：每一行都必须是核验器认识并检查过的危险函数
+    const lines = targets.filter((finding) => finding.cwe === cwe).map((finding) => finding.line).filter(Number.isFinite);
+    if (!code) {
+      decisions.push({ cwe, decision: "review", by: "unavailable", reason: "无法读取文件内容" });
+      continue;
+    }
+    try {
+      const response = await fetch(`${RAG_TRIAGE_URL}/triage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cwe, file: group.file, code, lines }),
+        signal: AbortSignal.timeout(Number(process.env.RAG_TRIAGE_TIMEOUT_MS || 180000))
+      });
+      if (!response.ok) throw new Error(`本地研判服务返回 ${response.status}`);
+      decisions.push({ cwe, ...(await response.json()) });
+    } catch (error) {
+      // 研判失败只影响这一类告警，并且只能变成「人工复核」，绝不能变成「排除」
+      decisions.push({ cwe, decision: "review", by: "error", reason: String(error?.message || error) });
+    }
+  }
+  return summarizeLocalRag(group, decisions);
+}
+
+export function summarizeLocalRag(group, decisions) {
+  const dismissed = decisions.filter((d) => d.decision === "dismissed");
+  const kept = decisions.filter((d) => d.decision === "kept");
+  // 只有文件里的全部告警都属于核验器支持的类型、且都被证明是误报，才能整体降级
+  const unsupported = (group.findings || []).filter((finding) => !LOCAL_RAG_CWES.has(finding.cwe));
+  const allDismissed = decisions.length > 0 && dismissed.length === decisions.length && unsupported.length === 0;
+  const exploitability = allDismissed ? "unlikely" : kept.length ? "plausible" : "conditional";
+  const signals = dismissed.map((d) => {
+    const claim = d.verified_claim;
+    return claim && ["dead_branch", "key_mismatch", "sanitizer"].includes(claim.type)
+      ? `${d.cwe}：第 ${claim.line} 行 —— ${CLAIM_LABELS[claim.type]}（已由核验器确认）`
+      : `${d.cwe}：程序分析确认危险函数不接收用户输入（已由核验器确认）`;
+  });
+  const result = normalizeAnalysisResult({
+    riskRating: allDismissed ? "low" : group.severity,
+    exploitability,
+    summary: allDismissed
+      ? "所有相关告警都被核验器证明为误报。"
+      : kept.length
+        ? "本地模型认为存在可被利用的数据流，且没有任何理由能证明安全，保留告警。"
+        : unsupported.length && dismissed.length === decisions.length && decisions.length
+          ? "核验器支持的告警已被证明为误报，但文件中还有其它类型的告警，保留原有风险等级。"
+          : "没有能被核验的误报理由，交给人工复核。",
+    evidence: decisions.map((d) => `${d.cwe}：${d.decision}（${d.by || "-"}）${d.reason ? " —— " + d.reason : ""}`),
+    falsePositiveSignals: signals,
+    recommendedActions: allDismissed ? ["抽查核验器给出的理由即可。"] : ["按告警位置人工确认数据流，并参考对应 CWE 的修复建议。"]
+  });
+  return { ...result, localRag: { decisions } };
+}
+
 function parseJsonObject(content) {
   const trimmed = String(content || "").trim();
   const unfenced = trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
@@ -576,6 +664,9 @@ function resolveAiProvider({ apiKey, model, provider = "openai" } = {}) {
   const providerConfig = providerConfigs[resolvedProvider];
   const resolvedModel = model || providerConfig.defaultModel;
   const resolvedApiKey = apiKey || firstEnvValue(providerConfig.envKeys);
+  if (providerConfig.keyless) {
+    return { providerConfig, resolvedModel, resolvedProvider, resolvedApiKey: "" };
+  }
   if (!resolvedApiKey) {
     const error = new Error(
       `请提供 ${providerConfig.label} API Key，或在 Vercel 环境变量配置 ${providerConfig.envKeys.join(" / ")}。`
